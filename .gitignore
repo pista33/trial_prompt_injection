@@ -1,0 +1,15 @@
+# APIキー
+.env
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# 実験中の一時ファイル
+sandbox/runtime/
+results/raw/
+
+# macOS
+.DS_Store
