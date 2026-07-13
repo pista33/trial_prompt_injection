@@ -1,15 +1,26 @@
-# APIキー
+# API keys and local settings
 .env
+.env.local
 
-# Python
+# Python virtual environment
 .venv/
+venv/
+
+# Python cache
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# 実験中の一時ファイル
+# Experiment runtime data
 sandbox/runtime/
 results/raw/
+*.jsonl
 
 # macOS
 .DS_Store
+
+# IDE
+.vscode/
+.idea/
