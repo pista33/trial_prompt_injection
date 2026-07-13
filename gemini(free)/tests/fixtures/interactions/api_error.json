@@ -1,0 +1,5 @@
+{
+  "http_status": 429,
+  "provider_code": "RESOURCE_EXHAUSTED",
+  "category": "rate_limit"
+}
