@@ -71,6 +71,10 @@ class Settings(BaseModel):
         return self.project_root / "data" / "custom_inputs"
 
     @property
+    def fs_scenarios_root(self) -> Path:
+        return self.project_root / "data" / "fs_scenarios"
+
+    @property
     def logs_dir(self) -> Path:
         return self.project_root / "artifacts" / "logs"
 
