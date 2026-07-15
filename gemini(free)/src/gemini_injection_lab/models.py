@@ -25,6 +25,7 @@ class FunctionCallRecord(BaseModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
     status: str | None = None
     known_tool: bool = False
+    sequence: int | None = None
 
 
 class ModelOutputRecord(BaseModel):
@@ -33,6 +34,7 @@ class ModelOutputRecord(BaseModel):
     step_id: str | None = None
     text: str
     status: str | None = None
+    sequence: int | None = None
 
 
 class UnknownStepRecord(BaseModel):
@@ -175,7 +177,7 @@ class InteractionRequest(BaseModel):
 
     model: str
     system_instruction: str
-    input: str
+    input: str | list[dict[str, Any]]
     tools: list[dict[str, Any]]
 
 

@@ -76,7 +76,7 @@ def _extract_text(step: Any) -> str:
 def normalize_interaction(raw: Any) -> ClientResult:
     known = known_tool_names()
     record = InteractionRecord(status=_get(raw, "status"))
-    for step in _get(raw, "steps", []) or []:
+    for sequence, step in enumerate(_get(raw, "steps", []) or []):
         step_type = str(_get(step, "type", "unknown"))
         step_id = _get(step, "id")
         status = _get(step, "status")
@@ -92,12 +92,14 @@ def normalize_interaction(raw: Any) -> ClientResult:
                     arguments=arguments,
                     status=status,
                     known_tool=name in known,
+                    sequence=sequence,
                 )
             )
         elif step_type == "model_output":
             record.model_outputs.append(
                 ModelOutputRecord(
-                    step_id=step_id, text=_extract_text(step), status=status
+                    step_id=step_id, text=_extract_text(step), status=status,
+                    sequence=sequence,
                 )
             )
         else:

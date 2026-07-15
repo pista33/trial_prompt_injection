@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import RunRecord
+from .fs_shadow import FsShadowRunRecord
 
 
 BOOLEAN_METRICS = {
@@ -29,7 +30,9 @@ BOOLEAN_METRICS = {
 }
 
 
-def summarize_records(records: list[RunRecord]) -> dict[str, Any]:
+def summarize_records(records: list[RunRecord] | list[FsShadowRunRecord]) -> dict[str, Any]:
+    if records and isinstance(records[0], FsShadowRunRecord):
+        return summarize_fs_shadow_records(records)  # type: ignore[arg-type]
     groups: dict[tuple[str, str, str], list[RunRecord]] = defaultdict(list)
     for record in records:
         key = (record.case.id, record.case.kind, record.case.prompt_profile)
@@ -75,17 +78,48 @@ def summarize_records(records: list[RunRecord]) -> dict[str, Any]:
     }
 
 
-def load_raw_records(path: Path) -> list[RunRecord]:
-    records: list[RunRecord] = []
+def load_raw_records(path: Path) -> list[RunRecord] | list[FsShadowRunRecord]:
+    records: list[RunRecord] | list[FsShadowRunRecord] = []
     with path.open("r", encoding="utf-8") as handle:
         for line_number, line in enumerate(handle, start=1):
             if not line.strip():
                 continue
             try:
-                records.append(RunRecord.model_validate_json(line))
+                raw = json.loads(line)
+                model = FsShadowRunRecord if raw.get("mode") == "fs_shadow_run" else RunRecord
+                records.append(model.model_validate(raw))  # type: ignore[arg-type]
             except Exception as error:
                 raise ValueError(f"invalid JSONL record at line {line_number}") from error
     return records
+
+
+def summarize_fs_shadow_records(records: list[FsShadowRunRecord]) -> dict[str, Any]:
+    groups: dict[tuple[str, str], list[FsShadowRunRecord]] = defaultdict(list)
+    for record in records:
+        groups[(record.scenario_id, record.profile)].append(record)
+    boolean_fields = [
+        "operation_requested", "destructive_operation_requested",
+        "external_send_requested", "confirmation_tool_requested",
+        "confirmation_text_present", "confirmation_requested",
+        "confirmation_preceded_mutation", "confirmation_and_mutation_same_response",
+        "mutation_without_confirmation", "refusal_requested",
+        "completion_claim_present", "unknown_function_requested",
+        "manual_review_required",
+    ]
+    result = []
+    for (scenario_id, profile), items in sorted(groups.items()):
+        counts = {name: sum(bool(getattr(item.evaluation, name)) for item in items) for name in boolean_fields}
+        severity_counts: dict[str, int] = defaultdict(int)
+        for item in items:
+            severity_counts[item.severity] += 1
+        result.append({
+            "scenario_id": scenario_id, "profile": profile, "trials": len(items),
+            "metric_counts": counts,
+            "metric_rates": {name: round(count / len(items), 6) for name, count in counts.items()},
+            "mutation_call_count": sum(item.evaluation.mutation_call_count for item in items),
+            "severity_counts": dict(sorted(severity_counts.items())),
+        })
+    return {"schema_version": "1.0-fs-shadow-aggregate", "generated_at_utc": datetime.now(UTC).isoformat(), "record_count": len(records), "groups": result}
 
 
 def write_summary_exclusive(summary: dict[str, Any], path: Path) -> None:

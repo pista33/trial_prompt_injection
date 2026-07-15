@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.metadata
 import json
 import platform
@@ -81,6 +82,7 @@ def _doctor(project_root: Path) -> int:
         project_root / "prompts" / "pdf_as_prompt_instruction.txt",
         project_root / "data" / "sandbox" / "documents",
         project_root / "data" / "custom_inputs",
+        project_root / "data" / "fs_scenarios" / "scenarios.json",
     ]
     checks["project_files"] = {
         "ok": all(path.exists() for path in required),
@@ -96,6 +98,15 @@ def _doctor(project_root: Path) -> int:
         cases_ok = False
         checks["case_error"] = {"ok": False, "type": type(error).__name__}
     checks["cases"] = {"ok": cases_ok, "count": case_count}
+    try:
+        from .fs_shadow import load_scenarios
+
+        fs_count = len(load_scenarios(project_root / "data" / "fs_scenarios"))
+        fs_ok = fs_count >= 6
+    except Exception:
+        fs_count = 0
+        fs_ok = False
+    checks["fs_scenarios"] = {"ok": fs_ok, "count": fs_count}
     try:
         from .tool_catalog import tool_schema_sha256
 
@@ -119,6 +130,7 @@ def _doctor(project_root: Path) -> int:
         "project_files",
         "cases",
         "tool_schema",
+        "fs_scenarios",
     }
     overall = all(checks[name]["ok"] for name in fatal_names)
     _print_json({"ok": overall, "checks": checks})
@@ -338,6 +350,79 @@ def _file_run(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+def _fs_shadow_run(settings: Settings, args: argparse.Namespace) -> int:
+    from .fs_shadow import prepare, run_once
+
+    if args.live and args.show_request:
+        raise ValueError("--show-request cannot be combined with --live")
+    if not args.live:
+        scenario, instruction, snapshot, request = prepare(
+            settings.fs_scenarios_root, args.scenario_id, args.profile, settings.requested_model
+        )
+        instruction_hash = hashlib.sha256(instruction.encode("utf-8")).hexdigest()
+        output: dict[str, Any] = {
+            "execution_mode": "dry_run", "scenario_id": scenario.id,
+            "profile": args.profile, "instruction_sha256": instruction_hash,
+            "snapshot_sha256": snapshot.snapshot_sha256,
+            "file_count": snapshot.file_count,
+            "directory_count": snapshot.directory_count,
+            "total_size": snapshot.total_size,
+            "function_declaration_names": [item["name"] for item in request.tools],
+            "store": False, "api_communication_performed": False,
+            "actual_file_mutation_performed": False,
+        }
+        if args.show_request:
+            sensitive = {"private/credentials.txt"}
+            files = []
+            for entry in snapshot.entries:
+                value = entry.model_dump(mode="json", exclude={"pdf_base64"})
+                if entry.path in sensitive and not args.show_sensitive_synthetic:
+                    value["text"] = "[MASKED SYNTHETIC CREDENTIALS]"
+                files.append(value)
+            input_value = request.input
+            if not args.show_sensitive_synthetic and isinstance(input_value, str):
+                for entry in snapshot.entries:
+                    if entry.path in sensitive and entry.text:
+                        encoded = json.dumps(entry.text, ensure_ascii=False)[1:-1]
+                        input_value = input_value.replace(encoded, "[MASKED SYNTHETIC CREDENTIALS]")
+            elif isinstance(input_value, list):
+                input_value = [
+                    ({**part, "data": "[OMITTED INLINE PDF DATA]"} if part.get("type") == "document" else part)
+                    for part in input_value
+                ]
+            output["request"] = {
+                "system_instruction": request.system_instruction,
+                "user_instruction": instruction,
+                "tree_manifest": snapshot.tree_manifest,
+                "files": files, "gemini_input": input_value,
+                "function_declarations": request.tools,
+            }
+        _print_json(output)
+        return 0
+    if not settings.allow_network:
+        raise ValueError("live execution safety gate is disabled")
+    if settings.requested_model == "UNSET":
+        raise ValueError("an exact model name is required for live mode")
+    from .client import GeminiInteractionsClient
+    from .recorder import JsonlRecorder, new_artifact_path
+
+    record, _ = run_once(
+        settings.fs_scenarios_root, args.scenario_id, args.profile,
+        settings.requested_model, GeminiInteractionsClient.from_environment(),
+    )
+    path = new_artifact_path(settings.logs_dir, "fs_shadow_run", ".jsonl")
+    with JsonlRecorder(path) as recorder:
+        recorder.append(record)
+    _print_json({
+        "execution_mode": "live", "scenario_id": record.scenario_id,
+        "profile": record.profile, "filesystem_unchanged": record.filesystem_unchanged,
+        "actual_file_mutation_performed": False,
+        "evaluation": record.evaluation.model_dump(mode="json"), "severity": record.severity,
+        "raw_log": str(path.relative_to(settings.project_root)),
+    })
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="gemini-injection-lab")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -365,6 +450,12 @@ def build_parser() -> argparse.ArgumentParser:
     file_run.add_argument("input_file")
     file_run.add_argument("--live", action="store_true")
     file_run.add_argument("--show-input", action="store_true")
+    fs_shadow = subparsers.add_parser("fs-shadow-run")
+    fs_shadow.add_argument("scenario_id")
+    fs_shadow.add_argument("--profile", choices=["baseline", "confirmation_policy"], default="baseline")
+    fs_shadow.add_argument("--live", action="store_true")
+    fs_shadow.add_argument("--show-request", action="store_true")
+    fs_shadow.add_argument("--show-sensitive-synthetic", action="store_true")
     return parser
 
 
@@ -394,6 +485,8 @@ def main(argv: list[str] | None = None) -> int:
             return _summarize(settings, args)
         if args.command == "file-run":
             return _file_run(settings, args)
+        if args.command == "fs-shadow-run":
+            return _fs_shadow_run(settings, args)
     except (ValueError, KeyError, RuntimeError) as error:
         parser.error(str(error))
     return 2
