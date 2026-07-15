@@ -78,7 +78,9 @@ def _doctor(project_root: Path) -> int:
         project_root / "prompts" / "system_baseline.txt",
         project_root / "prompts" / "system_hardened.txt",
         project_root / "prompts" / "user_task.txt",
+        project_root / "prompts" / "pdf_as_prompt_instruction.txt",
         project_root / "data" / "sandbox" / "documents",
+        project_root / "data" / "custom_inputs",
     ]
     checks["project_files"] = {
         "ok": all(path.exists() for path in required),
@@ -267,6 +269,75 @@ def _summarize(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+def _file_run(settings: Settings, args: argparse.Namespace) -> int:
+    from .custom_input import CustomInputStore, PDF_INSTRUCTION_NAME
+    from .file_runner import instruction_sha256
+
+    if args.live and args.show_input:
+        raise ValueError("--show-input cannot be combined with --live")
+    item = CustomInputStore(settings.custom_inputs_root).read(args.input_file)
+    instruction_path = settings.prompts_dir / PDF_INSTRUCTION_NAME
+    pdf_instruction = instruction_path.read_text(encoding="utf-8") if item.kind == "pdf" else ""
+
+    if not args.live:
+        output: dict[str, Any] = {
+            "execution_mode": "dry_run",
+            "input_filename": item.filename,
+            "input_kind": item.kind,
+            "mime_type": item.mime_type,
+            "input_bytes": item.size,
+            "input_sha256": item.sha256,
+            "requested_model": settings.requested_model,
+            "tools_enabled": False,
+            "system_instruction_enabled": False,
+            "store": False,
+            "api_communication_performed": False,
+        }
+        if item.kind == "pdf":
+            output["pdf_instruction_sha256"] = instruction_sha256(pdf_instruction)
+            output["pdf_instruction_added"] = True
+        if args.show_input:
+            if item.kind == "text":
+                output["input_text"] = item.text
+            else:
+                output["pdf_instruction_text"] = pdf_instruction
+                output["pdf_sent_as_document_part"] = True
+        _print_json(output)
+        return 0
+
+    if not settings.allow_network:
+        raise ValueError("live execution safety gate is disabled")
+    from .client import GeminiInteractionsClient
+    from .file_runner import run_file_live
+    from .recorder import JsonlRecorder, new_artifact_path
+
+    client = GeminiInteractionsClient.from_environment()
+    record = run_file_live(
+        item, pdf_instruction, settings.requested_model, client
+    )
+    path = new_artifact_path(settings.logs_dir, "file_run", ".jsonl")
+    with JsonlRecorder(path) as recorder:
+        recorder.append(record)
+    output = {
+        "execution_mode": record.execution_mode,
+        "input_filename": record.input_filename,
+        "input_kind": record.input_kind,
+        "input_sha256": record.input_sha256,
+        "requested_model": record.requested_model,
+        "returned_model": record.returned_model,
+        "interaction_status": record.interaction_status,
+        "response_text": record.response_text,
+        "usage": record.usage.model_dump(mode="json"),
+        "latency_ms": record.latency_ms,
+        "raw_log": str(path.relative_to(settings.project_root)),
+        "api_error": record.api_error.model_dump(mode="json"),
+        "unexpected_function_names": record.unexpected_function_names,
+        "manual_review_required": record.manual_review_required,
+    }
+    _print_json(output)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="gemini-injection-lab")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -290,6 +361,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     summarize = subparsers.add_parser("summarize")
     summarize.add_argument("log")
+    file_run = subparsers.add_parser("file-run")
+    file_run.add_argument("input_file")
+    file_run.add_argument("--live", action="store_true")
+    file_run.add_argument("--show-input", action="store_true")
     return parser
 
 
@@ -317,7 +392,9 @@ def main(argv: list[str] | None = None) -> int:
             return _batch(settings, args)
         if args.command == "summarize":
             return _summarize(settings, args)
-    except (ValueError, KeyError) as error:
+        if args.command == "file-run":
+            return _file_run(settings, args)
+    except (ValueError, KeyError, RuntimeError) as error:
         parser.error(str(error))
     return 2
 

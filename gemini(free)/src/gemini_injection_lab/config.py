@@ -67,6 +67,10 @@ class Settings(BaseModel):
         return self.project_root / "data" / "sandbox" / "documents"
 
     @property
+    def custom_inputs_root(self) -> Path:
+        return self.project_root / "data" / "custom_inputs"
+
+    @property
     def logs_dir(self) -> Path:
         return self.project_root / "artifacts" / "logs"
 

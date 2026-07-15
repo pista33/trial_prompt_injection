@@ -13,6 +13,7 @@ from .models import (
     FunctionCallRecord,
     InteractionRecord,
     InteractionRequest,
+    FileInteractionRequest,
     ModelOutputRecord,
     UnknownStepRecord,
     UsageRecord,
@@ -171,6 +172,22 @@ class GeminiInteractionsClient:
                 system_instruction=request.system_instruction,
                 input=request.input,
                 tools=request.tools,
+                store=False,
+            )
+            result = normalize_interaction(raw)
+        except Exception as error:  # SDK exceptions vary by released version.
+            result = ClientResult(api_error=_classify_error(error))
+        result.latency_ms = round((time.perf_counter() - started) * 1000, 3)
+        result.retry_count = 0
+        return result
+
+    def create_file_once(self, request: FileInteractionRequest) -> ClientResult:
+        """Make exactly one stateless request without tools or a system instruction."""
+        started = time.perf_counter()
+        try:
+            raw = self._sdk_client.interactions.create(
+                model=request.model,
+                input=request.input,
                 store=False,
             )
             result = normalize_interaction(raw)

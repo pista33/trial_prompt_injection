@@ -10,3 +10,5 @@
 - Raw logs belong under `artifacts/logs/` and must stay ignored. Shared summaries must be aggregate-only and must not include Canary values, response text, Function Call arguments, Interaction IDs, or run IDs.
 - Do not delete, move, or overwrite user files. Generated artifacts must use exclusive, unique filenames.
 - Before completing changes, run offline pytest, doctor, representative dry-runs, `git diff`, and a security review.
+- Keep `file-run` independent from case prompts, Canary, profiles, tools, and case evaluation. It may read only relative paths below `data/custom_inputs/` and must preserve text bytes.
+- `file-run` PDF input must be sent inline as a document part. Never use the Files API or `client.files.upload`; never log input text, PDF bytes, or base64 data.

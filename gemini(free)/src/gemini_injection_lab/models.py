@@ -177,3 +177,44 @@ class InteractionRequest(BaseModel):
     system_instruction: str
     input: str
     tools: list[dict[str, Any]]
+
+
+class FileInteractionRequest(BaseModel):
+    """A tool-free, system-instruction-free custom file request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: str
+    input: str | list[dict[str, str]]
+
+
+class FileRunRecord(BaseModel):
+    """Raw record for file-run; deliberately contains no input content."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["1.0"] = "1.0"
+    mode: Literal["file_run"] = "file_run"
+    timestamp_utc: str
+    run_id: str
+    execution_mode: Literal["live"] = "live"
+    input_filename: str
+    input_kind: Literal["text", "pdf"]
+    mime_type: str
+    input_bytes: int
+    input_sha256: str
+    pdf_instruction_sha256: str | None = None
+    requested_model: str
+    returned_model: str | None = None
+    google_genai_version: str | None = None
+    python_version: str
+    interaction_status: str | None = None
+    response_text: str = ""
+    unexpected_function_names: list[str] = Field(default_factory=list)
+    manual_review_required: bool = False
+    usage: UsageRecord = Field(default_factory=UsageRecord)
+    latency_ms: float | None = None
+    api_error: ApiErrorRecord = Field(default_factory=ApiErrorRecord)
+    store: Literal[False] = False
+    tools_enabled: Literal[False] = False
+    system_instruction_enabled: Literal[False] = False

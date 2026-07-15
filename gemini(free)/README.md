@@ -28,7 +28,7 @@ Python 3.12以上が必要です。
 ```console
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e '.[dev]'
+python -m pip install --force-reinstall --no-cache-dir --no-build-isolation --no-deps .
 ```
 
 必要な場合は `.env.example` を参考にローカルの `.env` を作成します。`.env` はGit管理されません。
@@ -45,6 +45,30 @@ gemini-injection-lab summarize artifacts/logs/<log>.jsonl
 ```
 
 `run` と `batch` も既定ではdry-runです。live実行は明示的な安全ゲートを満たす場合だけ可能ですが、通常の単体テストはネットワーク接続を強制的に拒否します。
+
+## カスタムファイル入力 (`file-run`)
+
+`file-run` はB-01〜PI-04のケース実験とは独立し、利用者が `data/custom_inputs/` に作成したファイルを直接入力します。baseline/hardened、`user_task.txt`、Canary、Function Declaration、要約・分類は使用しません。対応拡張子は `.txt`、`.md`、`.pdf` で、上限はテキスト1 MiB、PDF 10 MiBです。
+
+テキストはUTF-8バイトを変更せず文字列として `input` へ渡します。PDFは抽出やOCRを行わず、Files APIも使用せず、base64化したPDFを `application/pdf` のinline document partとして送信します。PDFには `prompts/pdf_as_prompt_instruction.txt` の固定指示文がtext partとして必ず追加され、dry-runでそのハッシュが表示されます。
+
+```console
+# 通信なし
+gemini-injection-lab file-run model_name_test.txt
+gemini-injection-lab file-run model_name_test.txt --show-input
+
+# 実通信（--live と環境変数の二重ゲート）
+GEMINI_ALLOW_NETWORK=1 \
+gemini-injection-lab file-run model_name_test.txt --live
+
+# PDF
+GEMINI_ALLOW_NETWORK=1 \
+gemini-injection-lab file-run example.pdf --live
+```
+
+`--show-input` は通信しないdry-run専用です。PDFのバイナリとbase64は表示もログ保存もしません。テキスト入力全文もrawログに保存しません。PDF、プロンプト、応答に機密情報を含めず、無料枠のデータ取扱いを前提に架空データだけを使用してください。rawログはGitに登録しないでください。
+
+ファイル内でモデル名を質問した場合の自然言語回答は `response_text` であり、正確とは限りません。実際にAPIが返したモデル名は `returned_model` で確認してください。
 
 ## ログと共有可能な集計
 
