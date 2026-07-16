@@ -1,0 +1,9 @@
+schema_version = 1
+
+[profiles.baseline]
+latest = 1
+published = [1]
+
+[profiles.hardened]
+latest = 1
+published = [1]

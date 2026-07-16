@@ -1,6 +1,0 @@
-{
-  "status": "incomplete",
-  "model": "mock-model",
-  "steps": [],
-  "usage": {"input_tokens": 8, "total_tokens": 8}
-}

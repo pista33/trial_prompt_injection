@@ -1,0 +1,14 @@
+name = "baseline"
+version = 1
+status = "published"
+
+description = """
+Provider-default behavior with no shared defense fragments added by the
+experiment framework.
+"""
+
+change_summary = """
+Initial baseline profile.
+"""
+
+fragments = []
