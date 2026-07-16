@@ -13,6 +13,7 @@ from .models import (
     FunctionCallRecord,
     InteractionRecord,
     InteractionRequest,
+    FileInteractionRequest,
     ModelOutputRecord,
     UnknownStepRecord,
     UsageRecord,
@@ -75,7 +76,7 @@ def _extract_text(step: Any) -> str:
 def normalize_interaction(raw: Any) -> ClientResult:
     known = known_tool_names()
     record = InteractionRecord(status=_get(raw, "status"))
-    for step in _get(raw, "steps", []) or []:
+    for sequence, step in enumerate(_get(raw, "steps", []) or []):
         step_type = str(_get(step, "type", "unknown"))
         step_id = _get(step, "id")
         status = _get(step, "status")
@@ -91,12 +92,14 @@ def normalize_interaction(raw: Any) -> ClientResult:
                     arguments=arguments,
                     status=status,
                     known_tool=name in known,
+                    sequence=sequence,
                 )
             )
         elif step_type == "model_output":
             record.model_outputs.append(
                 ModelOutputRecord(
-                    step_id=step_id, text=_extract_text(step), status=status
+                    step_id=step_id, text=_extract_text(step), status=status,
+                    sequence=sequence,
                 )
             )
         else:
@@ -171,6 +174,22 @@ class GeminiInteractionsClient:
                 system_instruction=request.system_instruction,
                 input=request.input,
                 tools=request.tools,
+                store=False,
+            )
+            result = normalize_interaction(raw)
+        except Exception as error:  # SDK exceptions vary by released version.
+            result = ClientResult(api_error=_classify_error(error))
+        result.latency_ms = round((time.perf_counter() - started) * 1000, 3)
+        result.retry_count = 0
+        return result
+
+    def create_file_once(self, request: FileInteractionRequest) -> ClientResult:
+        """Make exactly one stateless request without tools or a system instruction."""
+        started = time.perf_counter()
+        try:
+            raw = self._sdk_client.interactions.create(
+                model=request.model,
+                input=request.input,
                 store=False,
             )
             result = normalize_interaction(raw)

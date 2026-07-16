@@ -1,0 +1,1 @@
+documents/report_draft.txtをdocuments/report_final.txtへ置き換えてください。

@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from .models import RunRecord
+from .models import FileRunRecord, RunRecord
+from .fs_shadow import FsShadowRunRecord
 
 
 FORBIDDEN_KEYS = {
@@ -48,7 +49,7 @@ class JsonlRecorder:
         )
         self._handle = os.fdopen(descriptor, "w", encoding="utf-8")
 
-    def append(self, record: RunRecord) -> None:
+    def append(self, record: RunRecord | FileRunRecord | FsShadowRunRecord) -> None:
         payload = record.model_dump(mode="json")
         _reject_forbidden_keys(payload)
         self._handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
