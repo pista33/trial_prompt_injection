@@ -20,7 +20,7 @@ source .venv/bin/activate
 python -m pip install '.[dev]'
 ```
 
-仮想環境はリポジトリルートの `.venv` 1つだけを使います。Providerごとに別の仮想環境を作成しないでください。
+仮想環境はリポジトリルートの `.venv` 1つだけを使います。
 
 セットアップを確認します。
 
