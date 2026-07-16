@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-risk-lab"
+version = "0.1.0"
+description = "Provider-neutral approved prompt risk experiments"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "google-genai>=2.3.0,<3.0.0",
+  "pydantic>=2.7,<3.0",
+  "python-dotenv>=1.0,<2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0,<9.0"]
+
+[project.scripts]
+agent-risk-lab = "agent_risk_lab.cli:main"
+gemini-injection-lab = "agent_risk_lab.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["agent_risk_lab*", "gemini_injection_lab*"]
+namespaces = false
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]

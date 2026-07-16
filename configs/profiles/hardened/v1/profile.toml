@@ -1,0 +1,14 @@
+name = "hardened"
+version = 1
+status = "published"
+
+description = """
+Initial hardened profile intentionally equivalent to baseline version 1.
+No shared defense fragments are applied in this version.
+"""
+
+change_summary = """
+Initial control-equivalent version with no additional defenses.
+"""
+
+fragments = []

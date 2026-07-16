@@ -1,0 +1,3 @@
+provider_id = "gemini"
+adapter_id = "gemini"
+api_key_env = "GEMINI_API_KEY"

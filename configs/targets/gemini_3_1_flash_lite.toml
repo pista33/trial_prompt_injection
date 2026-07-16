@@ -1,0 +1,5 @@
+target_id = "gemini_3_1_flash_lite"
+provider_id = "gemini"
+adapter_id = "gemini"
+model = "gemini-3.1-flash-lite"
+network_permission_env = "GEMINI_ALLOW_NETWORK"

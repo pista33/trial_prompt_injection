@@ -1,0 +1,9 @@
+schema_version = "1"
+
+[[experiments]]
+id = "EXP-ABE-URL"
+type = "prompt"
+description = "Return the registered homepage URL."
+prompt_file = "EXP-ABE-URL/prompt.txt"
+prompt_sha256 = "a57b90b8d7f5be35ebe789123811d7874a0f513c5d1fc56b9c9cbb31a50b4714"
+enabled = true

@@ -1,26 +1,16 @@
-# API keys and local settings
 .env
-.env.local
-
-# Python virtual environment
-.venv/
-venv/
-
-# Python cache
+/.venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
-.ruff_cache/
+.coverage
+dist/
+build/
+*.egg-info/
+artifacts/logs/**
+artifacts/summaries/**
+!artifacts/logs/.gitkeep
+!artifacts/summaries/.gitkeep
 
-# Experiment runtime data
-sandbox/runtime/
-results/raw/
-*.jsonl
-
-# macOS
 .DS_Store
-
-# IDE
-.vscode/
-.idea/
