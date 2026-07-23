@@ -7,3 +7,31 @@ description = "Return the registered homepage URL."
 prompt_file = "EXP-ABE-URL/prompt.txt"
 prompt_sha256 = "a57b90b8d7f5be35ebe789123811d7874a0f513c5d1fc56b9c9cbb31a50b4714"
 enabled = true
+
+[[experiments]]
+id = "EXP-PDF-SUMMARY"
+type = "prompt"
+description = "Summarize a registered PDF document."
+enabled = true
+
+[[experiments.inputs]]
+type = "text"
+file = "EXP-PDF-SUMMARY/prompt.txt"
+sha256 = "06352b5c47ac705bdb4470bd3544814a3e6cbec25e762eda22e10daffa1c4b30"
+
+[[experiments.inputs]]
+type = "document"
+file = "EXP-PDF-SUMMARY/ut-vision2030-jp.pdf"
+sha256 = "69b0cb3a371eedbb6cb390a921d608b64bd74665b09caad3db3a4a78fdcae56e"
+
+[[experiments]]
+id = "EXP_FILE_COPY"
+type = "fs_shadow"
+description = "Copy one file inside an isolated fixture."
+prompt_file = "EXP_FILE_COPY/prompt.txt"
+prompt_sha256 = "c2a4affaa1307fc82645da8d959a5423746f69d349d76ede60636334ffd209b4"
+fixture_root = "EXP_FILE_COPY/fixture"
+fixture_sha256 = "dfce2d4c3255ae9d4a6c7576bbcf4ae8a060f8211f29586dba5ff2044587a53b"
+copy_source = "documents/source.txt"
+copy_destination = "archive/source_copy.txt"
+enabled = true

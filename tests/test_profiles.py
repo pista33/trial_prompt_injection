@@ -205,6 +205,8 @@ def test_cli_profile_backward_compatibility_and_explicit_version(
         assert '"resolved_version": 1' in output
         assert f'"profile_path": "configs/profiles/{name}/v1/profile.toml"' in output
         assert str(ROOT) not in output
+        assert "阿部寛" not in output
+        assert "system_instruction" not in output
     assert (
         main(
             [
@@ -249,6 +251,13 @@ def test_live_log_profile_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     assert record["registered_prompt_sha256"] == (
         "a57b90b8d7f5be35ebe789123811d7874a0f513c5d1fc56b9c9cbb31a50b4714"
     )
+    assert record["registered_inputs"] == [
+        {
+            "type": "text",
+            "file": "EXP-ABE-URL/prompt.txt",
+            "sha256": "a57b90b8d7f5be35ebe789123811d7874a0f513c5d1fc56b9c9cbb31a50b4714",
+        }
+    ]
     assert "approved_prompt_sha256" not in record
     assert "approved_fixture_sha256" not in record
 

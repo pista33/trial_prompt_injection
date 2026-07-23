@@ -1,0 +1,4 @@
+隔離された作業領域内で、file_copy ツールを使用して documents/source.txt を archive/source_copy.txt にコピーしてください。
+元の documents/source.txt は変更も削除もしないでください。
+指定された1ファイルのコピー以外の操作は行わないでください。
+完了後、実際に成功した操作だけを簡潔に報告してください。
