@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import os
+import re
 import time
 from typing import Any
 
@@ -12,13 +13,10 @@ from .models import (
     ClientResult,
     FunctionCallRecord,
     InteractionRecord,
-    InteractionRequest,
-    FileInteractionRequest,
     ModelOutputRecord,
     UnknownStepRecord,
     UsageRecord,
 )
-from .tool_catalog import known_tool_names
 from agent_risk_lab.core.models import CommonFunctionCall, CommonInteractionRequest, CommonInteractionResult
 
 
@@ -75,7 +73,6 @@ def _extract_text(step: Any) -> str:
 
 
 def normalize_interaction(raw: Any) -> ClientResult:
-    known = known_tool_names()
     record = InteractionRecord(status=_get(raw, "status"))
     for sequence, step in enumerate(_get(raw, "steps", []) or []):
         step_type = str(_get(step, "type", "unknown"))
@@ -92,7 +89,7 @@ def normalize_interaction(raw: Any) -> ClientResult:
                     name=name,
                     arguments=arguments,
                     status=status,
-                    known_tool=name in known,
+                    known_tool=False,
                     sequence=sequence,
                 )
             )
@@ -131,9 +128,63 @@ def normalize_interaction(raw: Any) -> ClientResult:
     )
 
 
+_PROVIDER_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{1,63}$")
+_SAFE_PROVIDER_CODES = (
+    "API_KEY_INVALID",
+    "INVALID_ARGUMENT",
+    "UNAUTHENTICATED",
+    "PERMISSION_DENIED",
+    "NOT_FOUND",
+    "MODEL_NOT_FOUND",
+    "FAILED_PRECONDITION",
+    "RESOURCE_EXHAUSTED",
+)
+
+
+def _structured_provider_code(error: Exception) -> str | None:
+    """Extract only non-sensitive machine codes from a provider error body.
+
+    The SDK error body can also contain a human-readable message. We
+    intentionally do not retain that message because a provider could echo
+    request content in it. Only conventional uppercase status/reason codes are
+    eligible for logs and CLI output.
+    """
+    found: list[str] = []
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if (
+                    key in {"status", "reason"}
+                    and isinstance(item, str)
+                    and _PROVIDER_CODE_PATTERN.fullmatch(item)
+                    and item not in found
+                ):
+                    found.append(item)
+                else:
+                    visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+        elif isinstance(value, str):
+            for safe_code in _SAFE_PROVIDER_CODES:
+                if safe_code in value and safe_code not in found:
+                    found.append(safe_code)
+
+    visit(getattr(error, "body", None))
+    visit(getattr(error, "message", None))
+    visit(str(error))
+    if found:
+        return ":".join(found)
+
+    code = getattr(error, "code", None)
+    if isinstance(code, str) and _PROVIDER_CODE_PATTERN.fullmatch(code):
+        return code
+    return None
+
+
 def _classify_error(error: Exception) -> ApiErrorRecord:
     status = getattr(error, "status_code", None)
-    code = getattr(error, "code", None)
     status_int = status if isinstance(status, int) else None
     retryable = status_int in {429, 500, 502, 503, 504}
     if status_int == 429:
@@ -150,44 +201,11 @@ def _classify_error(error: Exception) -> ApiErrorRecord:
     return ApiErrorRecord(
         occurred=True,
         http_status=status_int,
-        provider_code=str(code) if code is not None else None,
+        provider_code=_structured_provider_code(error),
         category=category,
         retryable=retryable,
         message_redacted=type(error).__name__,
     )
-
-
-class GeminiInteractionsClient:
-    """Single-request client. It contains no function execution or follow-up turn."""
-
-    def __init__(self, sdk_client: Any) -> None:
-        self._sdk_client = sdk_client
-
-    @classmethod
-    def from_environment(cls) -> "GeminiInteractionsClient":
-        key = os.environ.get("GEMINI_API_KEY")
-        if not key:
-            raise RuntimeError("live execution is not configured")
-        from google import genai
-
-        return cls(genai.Client(api_key=key))
-
-    def create_once(self, request: InteractionRequest) -> ClientResult:
-        started = time.perf_counter()
-        try:
-            raw = self._sdk_client.interactions.create(
-                model=request.model,
-                system_instruction=request.system_instruction,
-                input=request.input,
-                tools=request.tools,
-                store=False,
-            )
-            result = normalize_interaction(raw)
-        except Exception as error:  # SDK exceptions vary by released version.
-            result = ClientResult(api_error=_classify_error(error))
-        result.latency_ms = round((time.perf_counter() - started) * 1000, 3)
-        result.retry_count = 0
-        return result
 
 
 class GeminiProviderAdapter:
@@ -232,19 +250,3 @@ class GeminiProviderAdapter:
         except Exception as error:
             api_error = _classify_error(error)
             return CommonInteractionResult(self.provider_id,request.requested_model,latency_ms=round((time.perf_counter()-started)*1000,3),api_error=api_error.model_dump(mode="json"))
-
-    def create_file_once(self, request: FileInteractionRequest) -> ClientResult:
-        """Make exactly one stateless request without tools or a system instruction."""
-        started = time.perf_counter()
-        try:
-            raw = self._sdk_client.interactions.create(
-                model=request.model,
-                input=request.input,
-                store=False,
-            )
-            result = normalize_interaction(raw)
-        except Exception as error:  # SDK exceptions vary by released version.
-            result = ClientResult(api_error=_classify_error(error))
-        result.latency_ms = round((time.perf_counter() - started) * 1000, 3)
-        result.retry_count = 0
-        return result

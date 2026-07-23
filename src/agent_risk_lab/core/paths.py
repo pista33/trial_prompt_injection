@@ -1,9 +1,9 @@
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import os, stat
 MAX_TEXT=1024*1024; MAX_PDF=10*1024*1024
 def safe_relative(value:str)->PurePosixPath:
-    p=PurePosixPath(value)
-    if not value or "\0" in value or p.is_absolute() or ".." in p.parts: raise ValueError("unsafe relative path")
+    p=PurePosixPath(value); windows=PureWindowsPath(value)
+    if not value or "\0" in value or "\\" in value or p.is_absolute() or windows.is_absolute() or windows.drive or ".." in p.parts: raise ValueError("unsafe relative path")
     return p
 def safe_path(base:Path,value:str,kind:str="file")->Path:
     p=base

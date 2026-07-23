@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from gemini_injection_lab.client import normalize_interaction
+from agent_risk_lab.providers.gemini.client import _classify_error, normalize_interaction
 
 
 class UsageMetadata:
@@ -53,3 +53,42 @@ def test_preserves_unknown_scalar_usage_field() -> None:
     usage = normalize_interaction(raw).usage
 
     assert usage.raw_supported_fields["future_token_metric"] == 13
+
+
+def test_error_records_structured_provider_codes_without_message() -> None:
+    error = RuntimeError("provider message")
+    error.status_code = 400  # type: ignore[attr-defined]
+    error.body = {  # type: ignore[attr-defined]
+        "error": {
+            "status": "INVALID_ARGUMENT",
+            "message": "must not be retained",
+            "details": [{"reason": "API_KEY_INVALID"}],
+        }
+    }
+
+    record = _classify_error(error)
+
+    assert record.provider_code == "INVALID_ARGUMENT:API_KEY_INVALID"
+    assert record.message_redacted == "RuntimeError"
+    assert "must not be retained" not in record.model_dump_json()
+
+
+def test_error_rejects_unstructured_provider_text() -> None:
+    error = RuntimeError("provider message")
+    error.body = {  # type: ignore[attr-defined]
+        "error": {
+            "status": "invalid argument containing request text",
+            "reason": "../../secret",
+        }
+    }
+
+    assert _classify_error(error).provider_code is None
+
+
+def test_error_extracts_only_allowlisted_code_from_message() -> None:
+    error = RuntimeError("Error code: 400 - API_KEY_INVALID for secret value")
+
+    record = _classify_error(error)
+
+    assert record.provider_code == "API_KEY_INVALID"
+    assert "secret value" not in record.model_dump_json()
